@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Microsoft.VisualStudio.Shell;
 
 namespace DebuggerScript
@@ -13,6 +14,13 @@ namespace DebuggerScript
         public void Add(string name, string expression)
         {
             DebuggerScriptResult result = new DebuggerScriptResult(name, expression);
+            Results.Add(result);
+        }
+
+        public void AddLiteral(string name, string expression)
+        {
+            DebuggerScriptResult result = new DebuggerScriptResult(name, expression);
+            result.IsLiteral = true;
             Results.Add(result);
         }
 
@@ -209,6 +217,27 @@ namespace DebuggerScript
             }
             return newResults;
         }
+
+
+        public DebuggerScriptResultList Fold(string op)
+        {
+            DebuggerScriptResultList newResults = new DebuggerScriptResultList();
+
+            if (Results.Count >= 1)
+            {
+                string name = Results[0].Name;
+                string expr = Results[0].Expression;
+                for (int resultIndex = 1; resultIndex < Results.Count; ++resultIndex)
+                {
+                    name = string.Format(op, name, Results[resultIndex].Name);
+                    expr = string.Format(op, expr, Results[resultIndex].Expression);
+                }
+                newResults.Add(name, expr);
+            }
+
+            return newResults;
+        }
+
 
         string ExtractString(string input)
         {

@@ -1,0 +1,1 @@
+Copy these files to a folder named DebuggerScript in your documents folder.

@@ -27,6 +27,12 @@ namespace DebuggerScript
 
             Value = "<Unknown value>";
 
+            if (IsLiteral)
+            {
+                Value = Expression;
+                return;
+            }
+
             try
             {
                 if (debugger != null)
@@ -66,5 +72,6 @@ namespace DebuggerScript
         public string Expression { get; private set; }
         public bool UseAddressForName { get; set; }
         public bool Highlight { get; set; }
+        public bool IsLiteral { get; set; }
     }
 }

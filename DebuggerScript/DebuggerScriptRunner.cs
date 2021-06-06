@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,16 +11,20 @@ namespace DebuggerScript
 {
     public class DebuggerScriptRunner
     {
+        public DebuggerScriptRunner()
+        {
+            SavedResults = new Dictionary<string, DebuggerScriptResultList>();
+        }
+
         public virtual DebuggerScriptResultList Execute(string script, EnvDTE.Debugger debugger)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
-
-            SavedResults = new Dictionary<string, DebuggerScriptResultList>();
+            
             DebuggerScriptResultList results = null;
 
             foreach (string line in script.Split('\r', '\n'))
             {
-                if (!String.IsNullOrEmpty(line))
+                if (!String.IsNullOrEmpty(line) && !line.StartsWith("//"))
                 {
                     results = ExecuteLine(line, debugger);
                 }
@@ -39,19 +44,47 @@ namespace DebuggerScript
 
             DebuggerScriptResultList results = new DebuggerScriptResultList();
 
+            string functionDeclStart = "function ";
+            if (script.ToLower().StartsWith(functionDeclStart))
+            {
+                string functionDecl = script.Substring(functionDeclStart.Length);
+                string restOfScript; 
+                GetNextToken(functionDecl, out FunctionBeingAdded.Name, out FunctionBeingAdded.Args, out isFunction, out restOfScript);
+                if (!FunctionBeingAdded.Name.StartsWith("#"))
+                {
+                    throw new Exception("Function names must start with #");
+                }
+                FunctionBeingAdded.Script = "";
+                IsAddingFunction = true;
+                return null;
+            }
+            else if (IsAddingFunction)
+            {
+                if (script.ToLower() == "end")
+                {
+                    IsAddingFunction = false;
+                    Functions.Add(FunctionBeingAdded);
+                }
+                else
+                {
+                    FunctionBeingAdded.Script = FunctionBeingAdded.Script + script + "\n";
+                }
+                return null;
+            }
+
             GetNextToken(script, out token, out args, out isFunction, out script);
             
             do
-            {                
+            {
                 if (isFunction)
                 {
                     switch (token.ToLower())
                     {
                         case ".array":
-                            results = results.Array(int.Parse(args[0]));
+                            results = results.Array(int.Parse(GetArgValue(args[0], debugger)));
                             break;
                         case ".arrayrange":
-                            results = results.ArrayRange(int.Parse(args[0]), int.Parse(args[1]));
+                            results = results.ArrayRange(int.Parse(GetArgValue(args[0], debugger)), int.Parse(GetArgValue(args[1], debugger)));
                             break;
                         case ".cast":
                             results = results.Cast(args[0]);
@@ -61,16 +94,23 @@ namespace DebuggerScript
                             results = Concat(args.ToArray());
                             break;
                         case ".filter":
-                            results = results.Filter(args[0], debugger);
+                            if (args.Count != 1) throw new Exception("filter requires 1 argument");
+                            results = results.Filter(GetArgValue(args[0], debugger), debugger);
                             break;
                         case ".filterstring":
-                            results = results.FilterString(args[0], args[1], debugger);
+                            if (args.Count != 2) throw new Exception("filterstring requires 2 arguments");
+                            results = results.FilterString(GetArgValue(args[0], debugger), GetArgValue(args[1], debugger), debugger);
                             break;
                         case ".filternotstring":
-                            results = results.FilterNotString(args[0], args[1], debugger);
+                            if (args.Count != 2) throw new Exception("filternotstring requires 2 arguments");
+                            results = results.FilterNotString(GetArgValue(args[0], debugger), GetArgValue(args[1], debugger), debugger);
+                            break;
+                        case ".fold":
+                            if (args.Count != 1) throw new Exception("fold requires 1 argument");
+                            results = results.Fold(args[0]);
                             break;
                         case ".index":
-                            results = results.ArrayIndex(int.Parse(args[0]));
+                            results = results.ArrayIndex(int.Parse(GetArgValue(args[0], debugger)));
                             break;
                         case ".members":
                             results = results.Members(args.ToArray());
@@ -85,10 +125,10 @@ namespace DebuggerScript
                             results = results.Reference();
                             break;
                         case ".reinterpretcast":
-                            results = results.ReinterpretCast(args[0]);
+                            results = results.ReinterpretCast(GetArgValue(args[0], debugger));
                             break;
                         case ".rename":
-                            results = results.Rename(args[0]);
+                            results = results.Rename(GetArgValue(args[0], debugger));
                             break;
                         case "zip":
                         case ".zip":
@@ -98,18 +138,33 @@ namespace DebuggerScript
                         case ".zipwith":
                             results = ZipWith(args.ToArray());
                             break;
+                        case "import":
+                            Import(args[0], debugger);
+                            break;
                         case "=":
                             saveTo = args[0];
-                            if(!saveTo.StartsWith("$"))
+                            if (!saveTo.StartsWith("$"))
                             {
                                 throw new Exception("Variables must begin with '$'");
                             }
                             break;
                         default:
-                            throw new Exception("Unknown function");
+                            if (token.StartsWith("#"))
+                            {
+                                results = RunFunction(token, results, args, debugger);
+                            }
+                            else if (token.StartsWith(".#"))
+                            {
+                                results = RunFunction(token.Substring(1), results, args, debugger);
+                            }
+                            else
+                            {
+                                throw new Exception("Unknown function");
+                            }
+                            break;
                     }
                 }
-                else if(token.StartsWith(".") || token.StartsWith("->"))
+                else if (token.StartsWith(".") || token.StartsWith("->"))
                 {
                     results = results.Members(token);
                 }
@@ -120,7 +175,7 @@ namespace DebuggerScript
                         throw new Exception(String.Format("Using unknown variable {0}", token));
                     }
                     results = SavedResults[token];
-                }
+                }                
                 else
                 {
                     results = GetVariable(token);
@@ -132,6 +187,36 @@ namespace DebuggerScript
                 SavedResults.Add(saveTo, results);
             }
             return results;
+        }
+
+        DebuggerScriptResultList RunFunction(string name, DebuggerScriptResultList input, List<string> args, EnvDTE.Debugger debugger)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            foreach (Function function in Functions)
+            {
+                if (function.Name == name && function.Args.Count == args.Count)
+                {
+                    DebuggerScriptRunner functionRunner = new DebuggerScriptRunner();
+                    functionRunner.AddFunctions(Functions);
+                    functionRunner.AddResult("$this", input);
+                    for (int i = 0; i < args.Count; ++i)
+                    {
+                        if (args[i].StartsWith("$"))
+                        {
+                            functionRunner.AddResult(function.Args[i], SavedResults[args[i]]);
+                        }
+                        else
+                        {
+                            DebuggerScriptResultList argResult = new DebuggerScriptResultList();
+                            argResult.AddLiteral(args[i], args[i]);
+                            functionRunner.AddResult(function.Args[i], argResult);
+                        }
+                    }
+                    return functionRunner.Execute(function.Script, debugger);
+                }
+            }
+            throw new Exception("No matching function: " + name);
         }
 
         private static DebuggerScriptResultList Memory(List<string> args, DebuggerScriptResultList results)
@@ -160,6 +245,33 @@ namespace DebuggerScript
             }
 
             return results;
+        }
+
+        string GetArgValue(string arg, EnvDTE.Debugger debugger)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (arg.StartsWith("$"))
+            {
+                if (!SavedResults.ContainsKey(arg))
+                {
+                    throw new Exception(String.Format("Using unknown variable {0}", arg));
+                }
+                var indexResult = SavedResults[arg].GetResults()[0];
+                if (indexResult.IsLiteral)
+                {
+                    return indexResult.Expression;
+                }
+                else
+                {
+                    var expr = debugger.GetExpression(indexResult.Expression + ",d");
+                    return expr.Value;
+                }
+            }
+            else
+            {
+                return arg;
+            }
         }
 
         DebuggerScriptResultList Concat(string[] args)
@@ -317,7 +429,11 @@ namespace DebuggerScript
 
                                 if (paranCount == 0)
                                 {
-                                    args.Add(script.Substring(argStart, InnerIndex - argStart));
+                                    string arg = script.Substring(argStart, InnerIndex - argStart).Trim();
+                                    if (!String.IsNullOrEmpty(arg))
+                                    {
+                                        args.Add(arg);
+                                    }
                                     rest = script.Substring(InnerIndex + 1);
                                     return true;
                                 }
@@ -334,7 +450,22 @@ namespace DebuggerScript
                 }                
             }
             return true;
-        }        
+        }
+
+        void Import(string file, EnvDTE.Debugger debugger)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            string fullPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + "\\DebuggerScript\\" + file;
+            using (StreamReader stream = File.OpenText(fullPath))
+            {
+                while (!stream.EndOfStream)
+                {
+                    string line = stream.ReadLine();
+                    ExecuteLine(line, debugger);
+                }
+            }
+        }
 
         public DebuggerScriptResultList GetVariable(string name)
         {
@@ -345,6 +476,27 @@ namespace DebuggerScript
             return results;
         }
 
+        public void AddResult(string name, DebuggerScriptResultList value)
+        {
+            SavedResults.Add(name, value);
+        }
+
+        public void AddFunctions(List<Function> functionsToAdd)
+        {
+            Functions.AddRange(functionsToAdd);
+        }
+
         Dictionary<string, DebuggerScriptResultList> SavedResults;
+
+        public struct Function
+        {
+            public string Name;
+            public List<string> Args;
+            public string Script;
+        }
+
+        List<Function> Functions = new List<Function>();
+        Function FunctionBeingAdded;
+        bool IsAddingFunction = false;
     }
 }

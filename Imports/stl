@@ -1,0 +1,4 @@
+function #StlVector()
+$n=$this.members(.size())
+$this.Array($n)
+end
