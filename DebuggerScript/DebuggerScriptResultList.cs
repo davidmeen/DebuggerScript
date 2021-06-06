@@ -11,15 +11,15 @@ namespace DebuggerScript
             Results = new List<DebuggerScriptResult>();
         }
 
-        public void Add(string name, string expression)
+        public void Add(string name, string expression, int index)
         {
-            DebuggerScriptResult result = new DebuggerScriptResult(name, expression);
+            DebuggerScriptResult result = new DebuggerScriptResult(name, expression, index);
             Results.Add(result);
         }
 
         public void AddLiteral(string name, string expression)
         {
-            DebuggerScriptResult result = new DebuggerScriptResult(name, expression);
+            DebuggerScriptResult result = new DebuggerScriptResult(name, expression, 0);
             result.IsLiteral = true;
             Results.Add(result);
         }
@@ -31,7 +31,7 @@ namespace DebuggerScript
             {
                 for (int i = 0; i < count; ++i)
                 {
-                    newResults.Add("(" + result.Name + ")[" + i + "]", "(" + result.Expression + ")[" + i + "]");
+                    newResults.Add("(" + result.Name + ")[" + i + "]", "(" + result.Expression + ")[" + i + "]", i);
                 }
             }
 
@@ -45,7 +45,7 @@ namespace DebuggerScript
             {
                 for (int i = 0; i < count; ++i)
                 {
-                    newResults.Add("(" + result.Name + ")[" + (firstIndex + i) + "]", "(" + result.Expression + ")[" + (firstIndex + i) + "]");
+                    newResults.Add("(" + result.Name + ")[" + (firstIndex + i) + "]", "(" + result.Expression + ")[" + (firstIndex + i) + "]", firstIndex + i);
                 }
             }
 
@@ -59,7 +59,7 @@ namespace DebuggerScript
             {
                 foreach (string member in memberNames) 
                 {
-                    newResults.Add("(" + result.Name + ")" + member, "(" + result.Expression + ")" + member);
+                    newResults.Add("(" + result.Name + ")" + member, "(" + result.Expression + ")" + member, result.Index);
                 }
             }
             return newResults;
@@ -75,7 +75,18 @@ namespace DebuggerScript
             DebuggerScriptResultList newResults = new DebuggerScriptResultList();
             foreach (var result in Results)
             {
-                newResults.Add(name, result.Expression);
+                newResults.Add(name, result.Expression, result.Index);
+            }
+
+            return newResults;
+        }
+
+        public DebuggerScriptResultList RenameWithIndex(string name)
+        {
+            DebuggerScriptResultList newResults = new DebuggerScriptResultList();
+            foreach (var result in Results)
+            {
+                newResults.Add(string.Format("{0}[{1}]", name, result.Index), result.Expression, result.Index);
             }
 
             return newResults;
@@ -86,7 +97,7 @@ namespace DebuggerScript
             DebuggerScriptResultList newResults = new DebuggerScriptResultList();
             foreach (var result in Results)
             {
-                newResults.Add(CastString(newType, result.Name), CastString(newType, result.Expression));
+                newResults.Add(CastString(newType, result.Name), CastString(newType, result.Expression), result.Index);
             }
 
             return newResults;
@@ -107,7 +118,7 @@ namespace DebuggerScript
             DebuggerScriptResultList newResults = new DebuggerScriptResultList();
             foreach (var result in Results)
             {
-                newResults.Add(ReferenceString(result.Name), ReferenceString(result.Expression));
+                newResults.Add(ReferenceString(result.Name), ReferenceString(result.Expression), result.Index);
             }
 
             return newResults;
@@ -123,7 +134,7 @@ namespace DebuggerScript
             DebuggerScriptResultList newResults = new DebuggerScriptResultList();
             foreach (var result in Results)
             {
-                newResults.Add(PointerString(result.Name), PointerString(result.Expression));
+                newResults.Add(PointerString(result.Name), PointerString(result.Expression), result.Index);
             }
 
             return newResults;
@@ -180,7 +191,7 @@ namespace DebuggerScript
                 var expr = debugger.GetExpression(string.Format(filter, "(" + result.Expression + ")"), false);
                 if (expr != null && expr.Value == "true")
                 {
-                    newResults.Add(result.Name, result.Expression);
+                    newResults.Add(result.Name, result.Expression, result.Index);
                 }
             }
             return newResults;
@@ -196,7 +207,7 @@ namespace DebuggerScript
                 var expr = debugger.GetExpression(string.Format(filter, "(" + result.Expression + ")"), true);
                 if (expr != null && ExtractString(expr.Value) == ExpectedValue)
                 {
-                    newResults.Add(result.Name, result.Expression);
+                    newResults.Add(result.Name, result.Expression, result.Index);
                 }
             }
             return newResults;
@@ -212,7 +223,7 @@ namespace DebuggerScript
                 var expr = debugger.GetExpression(string.Format(filter, "(" + result.Expression + ")"), true);
                 if (expr != null && ExtractString(expr.Value) != ExpectedValue)
                 {
-                    newResults.Add(result.Name, result.Expression);
+                    newResults.Add(result.Name, result.Expression, result.Index);
                 }
             }
             return newResults;
@@ -232,7 +243,7 @@ namespace DebuggerScript
                     name = string.Format(op, name, Results[resultIndex].Name);
                     expr = string.Format(op, expr, Results[resultIndex].Expression);
                 }
-                newResults.Add(name, expr);
+                newResults.Add(name, expr, 0);
             }
 
             return newResults;

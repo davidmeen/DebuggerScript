@@ -130,6 +130,9 @@ namespace DebuggerScript
                         case ".rename":
                             results = results.Rename(GetArgValue(args[0], debugger));
                             break;
+                        case ".renamewithindex":
+                            results = results.RenameWithIndex(GetArgValue(args[0], debugger));
+                            break;
                         case "zip":
                         case ".zip":
                             results = Zip(args.ToArray());
@@ -290,7 +293,7 @@ namespace DebuggerScript
                 {
                     string exprString = inputResults.GetResults()[resultIndex].Expression;
                     string nameString = inputResults.GetResults()[resultIndex].Name;
-                    newResults.Add(exprString, nameString);
+                    newResults.Add(exprString, nameString, inputResults.GetResults()[resultIndex].Index);
                 }
             }
 
@@ -311,7 +314,7 @@ namespace DebuggerScript
                 {
                     string exprString = inputResults[inputIndex].GetResults()[resultIndex].Expression;
                     string nameString = inputResults[inputIndex].GetResults()[resultIndex].Name;
-                    newResults.Add(exprString, nameString);
+                    newResults.Add(exprString, nameString, inputResults[inputIndex].GetResults()[resultIndex].Index);
                 }
             }
 
@@ -333,8 +336,13 @@ namespace DebuggerScript
                 {
                     formatArgs[inputIndex] = "(" + inputResults[inputIndex].GetResults()[resultIndex].Expression + ")";
                 }
+                int sourceIndex = 0;
+                if (inputResults.Count() > 0)
+                {
+                    sourceIndex = inputResults[0].GetResults()[resultIndex].Index;
+                }
                 string exprString = string.Format(func, formatArgs);
-                newResults.Add(exprString, exprString);
+                newResults.Add(exprString, exprString, sourceIndex);
             }
 
             return newResults;
@@ -471,7 +479,7 @@ namespace DebuggerScript
         {
             ThreadHelper.ThrowIfNotOnUIThread();
             DebuggerScriptResultList results = new DebuggerScriptResultList();
-            results.Add(name, name);
+            results.Add(name, name, 0);
 
             return results;
         }

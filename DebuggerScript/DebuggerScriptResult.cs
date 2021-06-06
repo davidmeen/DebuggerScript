@@ -5,12 +5,13 @@ namespace DebuggerScript
 {
     public class DebuggerScriptResult
     {
-        public DebuggerScriptResult(string name, string expression)
+        public DebuggerScriptResult(string name, string expression, int index)
         {
             Name = name;
             Expression = expression;
             Value = "<Not evaluated>";
             Type = "";
+            Index = index;
         }
 
         public DebuggerScriptResult(string error)
@@ -73,5 +74,6 @@ namespace DebuggerScript
         public bool UseAddressForName { get; set; }
         public bool Highlight { get; set; }
         public bool IsLiteral { get; set; }
+        public int Index { get; private set; }
     }
 }

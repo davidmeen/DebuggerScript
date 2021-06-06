@@ -32,7 +32,7 @@ $vars=Values.ArrayRange(1,2)
 $xs=$vars->Position.x
 $ys=$vars->Position.y
 $zs=$vars->Position.z
-ZipWith(sqrt({0}*{0}+{1}*{1}+{2}*{2}),$xs,$ys,$zs).Rename(M).Fold({0}+{1})
+ZipWith(sqrt({0}*{0}+{1}*{1}+{2}*{2}),$xs,$ys,$zs).RenameWithIndex(M).Fold({0}+{1})
 */
 
 // The next 3 are equivalent
